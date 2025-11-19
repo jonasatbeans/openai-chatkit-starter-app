@@ -7,15 +7,20 @@ export const CREATE_SESSION_ENDPOINT = "/api/create-session";
 
 export const STARTER_PROMPTS: StartScreenPrompt[] = [
   {
-    label: "What can you do?",
-    prompt: "What can you do?",
+    label: "I would like to request a map",
+    prompt: "I would like to request a map",
+    icon: "circle-question",
+  },
+  {
+    label: "I am having an issue with a current map.",
+    prompt: "I am having an issue with a current map.",
     icon: "circle-question",
   },
 ];
 
 export const PLACEHOLDER_INPUT = "Ask anything...";
 
-export const GREETING = "How can I help you today?";
+export const GREETING = "Good to see you — what can I help you map today?";
 
 export const getThemeConfig = (theme: ColorScheme): ThemeOption => ({
   color: {
