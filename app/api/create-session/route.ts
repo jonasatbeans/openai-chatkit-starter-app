@@ -6,37 +6,62 @@ interface CreateSessionRequestBody {
   message?: string;
 }
 
+interface ErrorWithMessage {
+  message: string;
+}
+
+function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as Record<string, unknown>).message === "string"
+  );
+}
+
 const DEFAULT_CHATKIT_BASE = "https://api.openai.com";
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as CreateSessionRequestBody;
-
-  const userMessage = body.message ?? null;
+  let userMessage: string | null = null;
 
   try {
+    const body = (await request.json()) as CreateSessionRequestBody;
+    userMessage = body.message ?? null;
+  } catch {
+    // No message included; we allow session creation without initial user text
+    userMessage = null;
+  }
+
+  try {
+    const workflowVersion =
+      process.env.NEXT_PUBLIC_CHATKIT_WORKFLOW_VERSION !== undefined
+        ? Number(process.env.NEXT_PUBLIC_CHATKIT_WORKFLOW_VERSION)
+        : undefined;
+
     const response = await fetch(`${DEFAULT_CHATKIT_BASE}/v1/chatkit/sessions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.OPENAI_API_KEY!}`,
-        "OpenAI-Beta": "chatkit_beta=v1"
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY!}`,
+        "OpenAI-Beta": "chatkit_beta=v1",
       },
       body: JSON.stringify({
         workflow: {
           id: WORKFLOW_ID,
-          version: Number(process.env.NEXT_PUBLIC_CHATKIT_WORKFLOW_VERSION) || undefined,
+          version: workflowVersion,
         },
 
-        // Match Agent Builder behavior:
+        // Match Agent Builder input envelope
         input: {
-          messages: userMessage
-            ? [
-                {
-                  role: "user",
-                  content: userMessage,
-                },
-              ]
-            : [],
+          messages:
+            userMessage !== null
+              ? [
+                  {
+                    role: "user",
+                    content: userMessage,
+                  },
+                ]
+              : [],
 
           metadata: {
             source: "human",
@@ -46,13 +71,11 @@ export async function POST(request: Request) {
           state: {},
         },
 
-        // Required user string (not object)
+        // ChatKit requirement: user MUST be a string
         user: "user_" + Math.random().toString(36).slice(2),
 
         chatkit_configuration: {
-          file_upload: {
-            enabled: true,
-          },
+          file_upload: { enabled: true },
         },
       }),
     });
@@ -65,15 +88,13 @@ export async function POST(request: Request) {
     }
 
     return Response.json(json);
-  } catch (error: any) {
-    return new Response(
-      JSON.stringify({
-        error:
-          typeof error === "object" && error !== null && "message" in error
-            ? (error as any).message
-            : "Unknown error",
-      }),
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    const message = isErrorWithMessage(error)
+      ? error.message
+      : "Unknown error";
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+    });
   }
 }
